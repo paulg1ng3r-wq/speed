@@ -474,6 +474,21 @@
     </div>
   </div>
 
+  <div class="stats-row" style="grid-template-columns: 1fr 1fr; margin-bottom:12px;">
+    <div class="stat-card" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between; padding: 16px 20px;">
+      <div>
+        <div class="stat-label">Afstand gereden</div>
+        <div style="display:flex; align-items:baseline; gap:8px;">
+          <div class="stat-val" id="distance-val" style="font-size:36px;">0</div>
+          <div class="stat-unit" id="distance-unit">m</div>
+        </div>
+      </div>
+      <div style="font-size:48px; opacity:0.15;">📍</div>
+    </div>
+  </div>
+
+  </div>
+
   <div class="btn-row">
     <button class="primary" id="start-btn" onclick="startTracking()">▶ START</button>
     <button class="secondary" id="reset-btn" onclick="resetStats()">↺ RESET</button>
@@ -488,6 +503,8 @@ let maxSpeed = 0;
 let maxG = 0;
 let isRunning = false;
 let accAvailable = false;
+let totalDistance = 0; // meters
+let lastPos = null;
 
 const G = 9.80665; // m/s²
 
@@ -586,11 +603,44 @@ function stopTracking() {
   setStatus('acc', '', 'ACCEL: GESTOPT');
 }
 
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+            Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function updateDistance(dist) {
+  const el = document.getElementById('distance-val');
+  const unit = document.getElementById('distance-unit');
+  if (dist >= 1000) {
+    el.textContent = (dist / 1000).toFixed(2);
+    unit.textContent = 'km';
+  } else {
+    el.textContent = Math.round(dist);
+    unit.textContent = 'm';
+  }
+}
+
 function onGPS(pos) {
   const speedMs = pos.coords.speed || 0;
   const speedKmh = Math.round(speedMs * 3.6);
   const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : '—';
   const alt = pos.coords.altitude ? Math.round(pos.coords.altitude) : '—';
+
+  // Distance tracking
+  if (lastPos) {
+    const d = haversine(lastPos.lat, lastPos.lon, pos.coords.latitude, pos.coords.longitude);
+    // Only count if GPS accuracy is reasonable and movement is plausible
+    if ((pos.coords.accuracy || 999) < 50 && d < 500) {
+      totalDistance += d;
+      updateDistance(totalDistance);
+    }
+  }
+  lastPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
 
   document.getElementById('speed-val').textContent = speedKmh;
   document.getElementById('altitude').textContent = alt;
@@ -667,6 +717,10 @@ function onMotion(event) {
 }
 
 function resetStats() {
+  totalDistance = 0;
+  lastPos = null;
+  document.getElementById('distance-val').textContent = '0';
+  document.getElementById('distance-unit').textContent = 'm';
   maxSpeed = 0;
   maxG = 0;
   document.getElementById('max-speed').textContent = '0';
